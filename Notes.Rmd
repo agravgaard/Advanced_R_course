@@ -17,18 +17,96 @@ if (!is.element("advr38pkg", installed.packages()[, 1])){
 
 ## Advanced R Course
 
-notes...
+Use `browser()` to get a gdb-like debugging session.
 
-```{r cars}
-summary(cars)
+[rseek.org](rseek.org) is useful to search for R related stuff (as "r" is not the best search term)
+
+```{r, label="Exercise 0"}
+m <- matrix(sample(c(TRUE, FALSE), 12, replace = TRUE), 3)
+m + 0L
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r, label="Exercise 1"}
+sum_adjescent <- function(vec, n_adj){
+  l <- length(vec)
+  v_out <- c()
+  for (i in 0:(l / n_adj)) {
+    v_app <- 0
+    for (j in 1:n_adj) {
+      v_app <- v_app + vec[i * n_adj + j]
+    }
+    v_out <- c(v_out, v_app)
+  }
+  v_out
+  
+}
+sum_adjescent(1:10, 2)
+```
+```{r, label="Solution 1"}
+sum_every <- function(x, n) {
+  l <- length(x)
+  dim(x) <- c(n, l/n)
+  colSums(x)
+}
+sum_every(1:10, 2)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Day 2
+
+```{r label="Exercise 3.4.5"}
+# 1
+split_rnd_ind <- function(vec, n_groups){
+  if (n_groups < 1) {
+    return("n_groups should be >=1")
+  }
+  if (length(vec) < n_groups) {
+    return("vec should be at least the lenght of n_groups")
+  }
+  s_vec <- sample(vec)
+  split(s_vec, 1:n_groups)
+}
+
+split_rnd_ind(1:40, 3)
+
+# 2
+set.seed(1)
+rnd_mean <- function(x){
+  mean(sample(x, replace=TRUE))
+}
+x <- rnorm(10)
+v_means <- replicate(10e4, rnd_mean(x))
+
+quantile(v_means, probs = c(0.025, 0.975))
+
+# 3
+my_mtcars <- mtcars[c("mpg", "hp")]
+my_mtcars$my_col <- sample(c("mpg", "hp"),
+                           size = nrow(my_mtcars),
+                           replace = TRUE)
+
+idx <- match(my_mtcars$my_col, names(my_mtcars))
+rc_idx <- cbind(seq_len(nrow(my_mtcars)), idx)
+my_mtcars$my_val <- my_mtcars[rc_idx]
+head(my_mtcars)
+
+# 4
+df <- data.frame(
+  id1 = c("a", "f", "a"),
+  id2 = c("b", "e", "e"), 
+  id3 = c("c", "d", "f"),
+  inter = c(7.343, 2.454, 3.234),
+  stringsAsFactors = FALSE
+)
+code <- setNames(1:6, letters[1:6])
+
+df[1:3] <- lapply(df[1:3], function(x) {code[x]})
+df
+```
+
+Exercise 
+
+```{r label="Exercise "}
+test <- function(){
+  not_yet_defined_value + 10
+}
+```
