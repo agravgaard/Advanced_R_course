@@ -1,6 +1,9 @@
 ---
 title: "Notes"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
 ---
 
 ```{r setup, include=FALSE}
@@ -213,25 +216,575 @@ ggplot(mpg, aes(x=manufacturer, y=class)) +
   facet_grid(drv ~ cyl)
 ```
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = drv, y = cyl))
-What plots does the following code make? What does . do?
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) +
-  facet_grid(drv ~ .)
+# Day 4
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) +
-  facet_grid(. ~ cyl)
-Take the first faceted plot in this section:
+[Data transformation](https://r4ds.had.co.nz/transform.html)
 
-ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) + 
-  facet_wrap(~ class, nrow = 2)
-What are the advantages to using faceting instead of the colour aesthetic? What are the disadvantages? How might the balance change if you had a larger dataset?
+```{r, label="Function argument evaluation"}
+alter_state <- function(unused_var){
+  stateful_var <<- stateful_var + 1
+  unused_var + 1
+  0
+}
 
-Read ?facet_wrap. What does nrow do? What does ncol do? What other options control the layout of the individual panels? Why doesn’t facet_grid() have nrow and ncol arguments?
+stateful_var <- 0
+alter_state(unused_var = alter_state(unused_var = 0))
 
-When using facet_grid() you should usually put the variable with more unique levels in the columns. Why?
+stateful_var
+```
 
+```{r}
+library(nycflights13)
+library(dplyr)
+```
+Find all flights that
+
+1. Had an arrival delay of two or more hours
+1. Flew to Houston (IAH or HOU)
+1. Were operated by United, American, or Delta
+1. Departed in summer (July, August, and September)
+1. Arrived more than two hours late, but didn’t leave late
+1. Were delayed by at least an hour, but made up over 30 minutes in flight
+1. Departed between midnight and 6am (inclusive)
+
+```{r}
+flights %>% dplyr::filter(
+  arr_delay > 120 &
+    dest %in% c("IAH", "HOU") &
+    carrier %in% c("UA", "AA", "DL") &
+    month %in% 7:9 &
+    dep_delay <= 0 &
+    dep_time <= 600)
+
+flights %>% dplyr::filter(
+  arr_delay > 120 &
+    dep_delay <= 0
+    )
+```
+
+```{r}
+summary(flights)
+```
+
+```{r}
+if (!is.element("skimr", installed.packages()[, 1])){
+  install.packages("skimr")
+}
+library(skimr)
+skimr::skim(flights)
+```
+
+
+1. How could you use arrange() to sort all missing values to the start? (Hint: use is.na()).
+1. Sort flights to find the most delayed flights. Find the flights that left earliest.
+1. Sort flights to find the fastest (highest speed) flights.
+
+```{r}
+df <- tibble(x = c(5, 2, NA))
+df %>% arrange(!is.na(x), x)
+
+flights %>% arrange(flights$arr_delay)
+flights %>% arrange(flights$dep_time) # I say 2400 is not earlier than 0001
+flights %>% arrange(flights$distance / flights$air_time)
+```
+
+1. Brainstorm as many ways as possible to select dep_time, dep_delay, arr_time, and arr_delay from flights.
+  - any_of & vector, index, starts_with & ends_with, regex
+1. What happens if you include the name of a variable multiple times in a select() call?
+1. What does the any_of() function do? Why might it be helpful in conjunction with this vector?
+1. Does the result of running the following code surprise you? How do the select helpers deal with case by default? How can you change that default?
+
+```{r}
+flights %>% select(matches("^(dep|arr)_(time|delay)$"))
+
+flights %>% select("day", "day")
+
+vars <- c("year", "month", "day", "dep_delay", "arr_delay")
+flights %>% select(any_of(vars))
+
+select(flights, contains("TIME", ignore.case = TRUE))
+```
+
+
+
+1. Currently `dep_time` and `sched_dep_time` are convenient to look at, but hard to compute with because they’re not really continuous numbers. Convert them to a more convenient representation of number of minutes since midnight.
+1. Compare `air_time` with `arr_time - dep_time`. What do you expect to see? What do you see? What do you need to do to fix it?
+1. Compare `dep_time`, `sched_dep_time`, and `dep_delay`. How would you expect those three numbers to be related?
+1. Find the 10 most delayed flights using a ranking function. How do you want to handle ties? Carefully read the documentation for `min_rank()`.
+1. What does `1:3 + 1:10` return? Why?
+1. What trigonometric functions does R provide?
+
+```{r}
+hhmm_to_minutes <- function(hhmm){
+  (hhmm %/% 100L) * 60L + (hhmm %% 100L)
+}
+
+flights %>% mutate(dep_time = hhmm_to_minutes(dep_time))
+flights %>% mutate(sched_dep_time = hhmm_to_minutes(sched_dep_time)) %>% arrange(sched_dep_time)
+
+```
+
+
+1. Brainstorm at least 5 different ways to assess the typical delay characteristics of a group of flights. Consider the following scenarios:
+    1. A flight is 15 minutes early 50% of the time, and 15 minutes late 50% of the time.
+    1. A flight is always 10 minutes late.
+    1. 99% of the time a flight is on time. 1% of the time it’s 2 hours late.
+
+```{r}
+flights %>%
+  group_by(flights$arr_delay == -15, flights$arr_time == 15) %>%
+  count()
+
+flights %>%
+  group_by(flights$arr_delay == 10) %>%
+  count()
+
+flights %>%
+  group_by(flights$arr_delay == 0) %>%
+  count()
+```
+The exercise is flawed by language of precise comparison, fuck you
+
+2. Which is more important: arrival delay or departure delay?
+  * WTF does that have to do with R?
+3. Come up with another approach that will give you the same output as `not_cancelled %>% count(dest)` and `not_cancelled %>% count(tailnum, wt = distance)` (without using count()).
+```{r}
+not_cancelled <- flights %>% 
+  filter(!is.na(dep_delay), !is.na(arr_delay))
+not_cancelled %>% group_by(dest) %>% summarise(n = n())
+```
+
+
+Why are you buying clothes at the soup store!?
+
+4. Look at the number of cancelled flights per day. Is there a pattern? Is the proportion of cancelled flights related to the average delay?
+```{r}
+flights %>%
+  group_by(day, cancelled = is.na(dep_delay) | is.na(arr_delay)) %>%
+  count() %>%
+  filter(cancelled==TRUE) %>%
+  ggplot(aes(x=day, y=n)) + geom_point()
+```
+
+Which carrier has the worst delays? Challenge: can you disentangle the effects of bad airports vs. bad carriers? Why/why not? (Hint: think about `flights %>% group_by(carrier, dest) %>% summarise(n()))`
+
+```{r}
+flights %>%
+  group_by(carrier) %>%
+  summarise(mean_delay = mean(dep_delay, na.rm = TRUE)) %>% arrange(desc(mean_delay))
+```
+
+
+# Day 5
+5.7.1 Exercises
+1. Refer back to the lists of useful mutate and filtering functions. Describe how each operation changes when you combine it with grouping.
+  * They are independent of groups, unless multi-arg functions: `sum()`, `mean()`, etc.
+
+2. Which plane (`tailnum`) has the worst on-time record?
+  * N725MQ
+
+3. What time of day should you fly if you want to avoid delays as much as possible?
+  * At 11 pm
+
+```{r, label="Good morning"}
+library(nycflights13)
+library(dplyr)
+
+flights %>%
+  dplyr::group_by(carrier) %>%
+  dplyr::mutate(test = arr_delay / 60) %>%
+  dplyr::filter(test > 1.0)
+
+flights %>%
+  dplyr::filter(arr_delay > 0) %>%
+  dplyr::group_by(tailnum) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+
+flights %>%
+  dplyr::filter(arr_delay > 0) %>%
+  dplyr::group_by(hour) %>%
+  summarise(n = n()) %>%
+  arrange(n)
+
+```
+
+```{r, label="outliers"}
+distributions <- flights %>%
+  group_by(dest) %>%
+  mutate(speed = distance / air_time) %>%
+  filter(dest == "IAH") %>%
+  pull(speed)
+hist(distributions)
+abline(v = median(distributions, na.rm = TRUE) + c(-1, 1) * 3 * IQR(distributions, na.rm = TRUE))
+
+# Tukey's rule
+tukey <- function(x){
+  abs(x - median(x, na.rm = TRUE)) > 1.5 * IQR(x, na.rm = TRUE)
+}
+
+library(ggplot2)
+
+flights %>%
+  mutate(speed = distance / air_time) %>%
+  group_by(dest) %>%
+  mutate(med_speed = median(speed, na.rm = TRUE)) %>%
+  filter(tukey(speed)) %>%
+  ggplot() +
+  geom_point(aes(speed, med_speed)) +
+  theme_bw(16) +
+  geom_abline(color = "red")
+  
+```
+
+
+
+13.4.6 Exercises
+1. Compute the average delay by destination, then join on the airports data frame so you can show the spatial distribution of delays. Here’s an easy way to draw a map of the United States:
+
+```{r}
+if (!is.element("maps", installed.packages()[, 1])){
+  install.packages("maps")
+}
+library(maps)
+
+flights %>%
+  group_by(dest) %>%
+  summarize(avg_delay = mean(arr_delay, na.rm = TRUE)) %>%
+  left_join(select(airports, lat, lon, faa), by = c("dest" = "faa")) %>%
+  ggplot(aes(lon, lat, colour = avg_delay)) +
+    theme_bw(16) +
+    scale_colour_viridis_c() +
+    borders("state") +
+    geom_point() +
+    coord_quickmap()
+
+```
+
+2. You might want to use the size or colour of the points to display the average delay for each airport.
+
+3. Add the location of the origin and destination (i.e. the lat and lon) to flights.
+
+```{r}
+flights %>%
+  left_join(select(airports, lat, lon, faa), by = c("dest" = "faa")) %>%
+  left_join(select(airports, lat, lon, faa), by = c("origin" = "faa"), suffix = c("_dest", "_origin")) %>%
+  ggplot(aes(lon_origin, lat_origin, xend = lon_dest, yend=lat_dest)) +
+    theme_bw(16) +
+    scale_colour_viridis_c() +
+    borders("state") +
+    geom_segment() +
+    coord_quickmap()
+
+```
+
+
+4. Is there a relationship between the age of a plane and its delays?
+
+```{r}
+flights %>%
+  group_by(tailnum) %>%
+  summarise(avg_delay = mean(arr_delay, na.rm = TRUE)) %>%
+  left_join(select(planes, tailnum, year_of_prod = year), by = "tailnum") %>%
+  ggplot(aes(year_of_prod, avg_delay)) +
+    theme_bw(16) +
+    geom_point() +
+    geom_smooth()
+  
+  
+```
+
+```{r}
+library(gapminder)
+library(tidyr)
+
+gapminder %>%
+  group_by(country, continent) %>%
+  tidyr::nest()
+
+# Equivalent to
+gapminder %>%
+  group_by(country, continent) %>%
+  summarise(data = list(tibble(year, lifeExp, pop, gdpPercap)))
+```
+
+```{r}
+country_model <- function(df){
+  lm(lifeExp ~ year, data = df)
+}
+
+by_country <- gapminder %>%
+  group_by(country, continent) %>%
+  tidyr::nest()
+
+country_model(by_country$data[[1]])
+
+by_country2 <- by_country %>%
+  mutate(model = lapply(data, country_model))
+```
+
+
+```{r, label=datetime}
+if (!is.element("lubridate", installed.packages()[, 1])){
+  install.packages("lubridate")
+}
+library(lubridate)
+
+leap_year_test <- ymd_hms("2021-02-28 23:50:17")
+leap_year_test + hours(1)
+
+```
+
+# Day 6
+
+```{r}
+if (!is.element("lobstr", installed.packages()[, 1])){
+  install.packages("lobstr")
+}
+library(lobstr)
+x <- 1:3
+y <- x
+lobstr::obj_addr(x) == lobstr::obj_addr(y)
+
+x[2] <- 7
+lobstr::obj_addr(x) == lobstr::obj_addr(y)
+```
+
+```{r}
+monte_carlo <- function(N) {
+  
+  hits <- 0
+  u1 <- runif(N)
+  u2 <- runif(N)
+  vhits <- u1 ^ 2 > u2
+  hits <- sum(vhits)
+  
+  hits / N
+}
+
+N <- 1e6
+system.time(monte_carlo(N))
+
+```
+
+## C++
+
+```{r, label="Rcpp_test"}
+library(Rcpp)
+registerPlugin(
+  "tbb",
+  plugin = function() {
+    list(env = list(PKG_CXXFLAGS = "",
+                    PKG_LIBS = "-ltbb"))
+  }
+)
+Rcpp::sourceCpp('Rcpp_test.cpp')
+```
+
+
+```{r, echo=FALSE}
+xfun::pkg_load2(c("htmltools", "mime"))
+xfun::embed_file("Rcpp_test.cpp")
+```
+
+# Day 7
+
+```{Rcpp}
+#include <Rcpp.h>
+
+// [[Rcpp::plugins(cpp2a, openmp, tbb)]]
+
+// [[Rcpp::export]]
+auto fun_cpp(Rcpp::NumericVector &x){
+  auto y = Rcpp::NumericVector(x.size());
+  y.at(0) = 1;
+  for (size_t i = 0; i < y.size(); ++i){
+    y.at(i) = y[i - 1] * y[i - 1] + x[i];
+  }
+  return y;
+  }
+  
+  
+// [[Rcpp::export]]
+auto fun_cpp_omp(Rcpp::NumericVector &x){
+  auto y = Rcpp::NumericVector(x.size());
+  y.at(0) = 1;
+#pragma omp unroll
+  for (size_t i = 0; i < y.size(); ++i){
+    y.at(i) = y[i - 1] * y[i - 1] + x[i];
+  }
+  return y;
+  }
+```
+
+```{r}
+fun_r <- function(x) {
+  n <- length(x)
+  y <- numeric(n); y[1] <- 1
+  for (i in 2:n) {
+    y[i] <- y[i - 1]^2 + x[i]
+  }
+  y
+}
+
+x <- runif(10e4)
+
+system.time(fun_r(x))
+
+system.time(fun_cpp(x))
+
+system.time(fun_cpp_omp(x))
+
+microbenchmark::microbenchmark(
+  fun_r(x),
+  fun_cpp(x),
+  fun_cpp_omp(x)
+)
+
+```
+
+
+```{r}
+mydf <- readRDS(system.file("extdata/one-million.rds", package = "advr38pkg"))
+
+QRA_3Dmatrix <- array(0, dim = c(max(mydf$ID), max(mydf$Volume), 2))
+
+for (i in seq_len(nrow(mydf))) {
+  # Row corresponds to IDcell 
+  row    <- mydf[[i, 1]]    
+  # Column corresponds to the volume class
+  column <- mydf[[i, 3]]      
+  # Number of events, initially zero, then +1
+  QRA_3Dmatrix[row, column, 1] <- QRA_3Dmatrix[row, column, 1] + 1  
+  # Sum energy 
+  QRA_3Dmatrix[row, column, 2] <- QRA_3Dmatrix[row, column, 2] + 
+    1 - 1.358 / (1 + exp( (1000 * mydf[[i, 2]] - 129000) / 120300 ))
+}
+```
+
+
+```{Rcpp}
+#include <Rcpp.h>
+
+// [[Rcpp::plugins(cpp2a, openmp, tbb)]]
+
+// [[Rcpp::export]]
+auto cpp_loop(Rcpp::NumericMatrix &X, Rcpp::NumericMatrix &Y){
+  auto dist = Rcpp::NumericMatrix(X.nrow(), Y.nrow());
+  for (size_t i = 0; i < X.nrow(); ++i) {
+    for (size_t j = 0; j < Y.nrow(); ++j) {
+      Rcpp::NumericVector XmY2 = Rcpp::pow(X(i, Rcpp::_ ) - Y(j, Rcpp::_),2);
+      double sum_XmY2 = Rcpp::sum(XmY2);
+      dist(i, j) = std::sqrt(sum_XmY2);
+    }
+  }
+  return dist;
+}
+
+```
+
+
+```{r}
+set.seed(1)
+X <- matrix(rnorm(1000), ncol = 5)
+Y <- matrix(rnorm(5000), ncol = 5)
+
+system.time({
+sum_X2 <- rowSums(X^2)
+sum_Y2 <- rowSums(Y^2)
+sum_X2_Y2 <- outer(sum_X2, sum_Y2, '+')
+sum_XY <- tcrossprod(X, Y)
+
+sqrt(sum_X2_Y2 + sum_XY)
+})
+
+system.time(cpp_loop(X, Y))
+
+```
+
+
+```{Rcpp}
+#include <Rcpp.h>
+
+// [[Rcpp::plugins(cpp2a, openmp, tbb)]]
+
+// [[Rcpp::export]]
+auto mean_cumcum_rnorm(size_t N){
+  Rcpp::NumericVector v_cumsum = Rcpp::cumsum(Rcpp::rnorm(N)); 
+  auto v_thresh = std::vector<int>(N);
+  std::transform(v_cumsum.begin(), v_cumsum.end(), v_thresh.begin(), [](const double val){return val < 0.0 ? 0 : 1;});
+  auto sum_thresh = std::reduce(v_thresh.begin(), v_thresh.end(), 0.0);
+  return sum_thresh / static_cast<double>(N) ;
+}
+
+```
+
+```{r}
+system.time(
+ mean(cumsum(rnorm(1e4)) < 0)
+)
+system.time(
+ mean_cumcum_rnorm(1e4)
+)
+
+
+```
+
+```{Rcpp}
+#include <Rcpp.h>
+
+// [[Rcpp::plugins(cpp2a, openmp, tbb)]]
+
+// [[Rcpp::export]]
+auto saxpy_like_loop(Rcpp::NumericMatrix& tau, size_t M, Rcpp::NumericVector &step1 ){
+  for (size_t i = 1; i < tau.nrow(); ++i) {
+    for (size_t j = 0; j < M; ++j) {
+      tau(i, j) = tau(i - 1, j) + step1(j) * std::pow(1.0025, (i - 1));
+    }
+  } 
+return tau;
+}
+
+```
+
+
+```{r}
+M <- 50
+step1 <- runif(M)
+A <- rnorm(M)
+N <- 1e4
+
+tau <- matrix(0, N + 1, M)
+tau[1, ] <- A
+
+system.time({
+for (j in 1:M) {
+  for (i in 2:nrow(tau)) {
+    tau[i, j] <- tau[i - 1, j] + step1[j] * 1.0025^(i - 2)
+  }
+} 
+})
+
+tau <- matrix(0, N + 1, M)
+tau[1, ] <- A
+
+system.time({
+  for (i in 2:nrow(tau)) {
+    tau[i, ] <- tau[i - 1, ] + step1 * 1.0025^(i - 2)
+  }
+})
+
+tau <- matrix(0, N + 1, M)
+tau[1, ] <- A
+
+system.time({
+  tau <- saxpy_like_loop(tau, M, step1)
+})
+
+```
+
+
+# Day 8
+
+See github.com/agravgaard/minidplyr
